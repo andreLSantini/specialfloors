@@ -196,7 +196,7 @@
             <div class="mb-8 text-center">
                 <h3 class="text-3xl font-bold text-gray-800">Services Offered</h3>
                 <p class="text-gray-600 mt-2">
-                    We handle residential and commercial projects with quality craftsmanship, on-time delivery, and premium finishes.
+                    We handle residential  projects with quality craftsmanship, on-time delivery, and premium finishes.
                 </p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -243,7 +243,10 @@
                 <h4 class="text-xl font-bold mb-4">New Service</h4>
                 <input type="text" id="service-title" placeholder="Service title" class="w-full border border-gray-300 rounded-lg px-4 py-2 mb-3">
                 <textarea id="service-description" placeholder="Service description" class="w-full border border-gray-300 rounded-lg px-4 py-2 mb-3 h-24"></textarea>
-                <input type="text" id="service-image" placeholder="Image URL (optional)" class="w-full border border-gray-300 rounded-lg px-4 py-2 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <input type="text" id="service-image-before" placeholder="Before image URL (optional)" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                    <input type="text" id="service-image-after" placeholder="After image URL (optional)" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                </div>
                 <input type="text" id="service-location" placeholder="Service location (optional)" class="w-full border border-gray-300 rounded-lg px-4 py-2 mb-4">
                 <div class="flex space-x-2">
                     <button id="save-service-btn" class="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition">Save</button>
@@ -375,6 +378,19 @@
         </div>
     </footer>
 
+    <!-- Image Modal -->
+    <div id="image-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div class="relative max-w-5xl w-full">
+            <button id="image-modal-close" class="absolute -top-10 right-0 text-white text-sm bg-black/50 px-3 py-1 rounded hover:bg-black/70 transition">
+                Close
+            </button>
+            <div class="bg-white rounded-lg overflow-hidden shadow-2xl">
+                <img id="image-modal-img" src="" alt="Expanded view" class="w-full max-h-[80vh] object-contain bg-black">
+                <div id="image-modal-caption" class="px-4 py-3 text-sm text-gray-600"></div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // State
         let isAdmin = false;
@@ -403,7 +419,8 @@
             reviews = loadFromStorage('reviews') || [];
             contacts = loadFromStorage('contacts') || [];
 
-            if (services.length === 0) {
+            const hasBeforeAfter = services.some(s => s && s.beforeImage && s.afterImage);
+            if (services.length === 0 || !hasBeforeAfter) {
                 seedServicesFromImages();
                 saveToStorage('services', services);
             }
@@ -553,7 +570,8 @@
         document.getElementById('save-service-btn').addEventListener('click', () => {
             const title = document.getElementById('service-title').value;
             const description = document.getElementById('service-description').value;
-            const image = document.getElementById('service-image').value;
+            const beforeImage = document.getElementById('service-image-before').value;
+            const afterImage = document.getElementById('service-image-after').value;
             const location = document.getElementById('service-location').value;
 
             if (!title || !description) {
@@ -565,7 +583,8 @@
                 id: Date.now(),
                 title,
                 description,
-                image,
+                beforeImage,
+                afterImage,
                 location,
                 date: new Date().toLocaleDateString('en-US')
             };
@@ -581,7 +600,8 @@
         function clearServiceForm() {
             document.getElementById('service-title').value = '';
             document.getElementById('service-description').value = '';
-            document.getElementById('service-image').value = '';
+            document.getElementById('service-image-before').value = '';
+            document.getElementById('service-image-after').value = '';
             document.getElementById('service-location').value = '';
         }
 
@@ -595,9 +615,16 @@
 
             grid.innerHTML = services.map(service => `
                 <div class="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition">
-                    ${service.image ? `
-                        <div class="h-48 bg-gray-200 overflow-hidden">
-                            <img src="${service.image}" alt="${service.title}" class="w-full h-full object-cover">
+                    ${(service.beforeImage && service.afterImage) ? `
+                        <div class="grid grid-cols-2 h-48 bg-gray-200 overflow-hidden">
+                            <div class="relative">
+                                <img src="${service.beforeImage}" alt="${service.title} - Before" class="w-full h-full object-cover cursor-pointer" onclick="openImageModal('${service.beforeImage.replace(/'/g, "\\'")}', '${service.title.replace(/'/g, "\\'")} - Before')">
+                                <span class="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">Before</span>
+                            </div>
+                            <div class="relative">
+                                <img src="${service.afterImage}" alt="${service.title} - After" class="w-full h-full object-cover cursor-pointer" onclick="openImageModal('${service.afterImage.replace(/'/g, "\\'")}', '${service.title.replace(/'/g, "\\'")} - After')">
+                                <span class="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">After</span>
+                            </div>
                         </div>
                     ` : ''}
                     <div class="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-100">
@@ -662,15 +689,58 @@
                 'image/services (15).jpeg'
             ];
 
-            services = defaultServiceImages.map((src, index) => ({
-                id: Date.now() + index,
-                title: `Service ${index + 1}`,
-                description: 'Professional flooring and home improvement work.',
-                image: src,
-                location: '',
-                date: new Date().toLocaleDateString('en-US')
-            }));
+            services = [];
+            for (let i = 0; i < defaultServiceImages.length; i += 2) {
+                const beforeImage = defaultServiceImages[i];
+                const afterImage = defaultServiceImages[i + 1];
+                services.push({
+                    id: Date.now() + i,
+                    title: `Service ${Math.floor(i / 2) + 1}`,
+                    description: 'Professional flooring and home improvement work.',
+                    beforeImage,
+                    afterImage: afterImage || '',
+                    location: '',
+                    date: new Date().toLocaleDateString('en-US')
+                });
+            }
         }
+
+        // Image modal
+        function openImageModal(src, caption) {
+            const modal = document.getElementById('image-modal');
+            const img = document.getElementById('image-modal-img');
+            const cap = document.getElementById('image-modal-caption');
+
+            img.src = src;
+            img.alt = caption || 'Expanded view';
+            cap.textContent = caption || '';
+            modal.classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('image-modal');
+            const img = document.getElementById('image-modal-img');
+            const cap = document.getElementById('image-modal-caption');
+
+            img.src = '';
+            img.alt = 'Expanded view';
+            cap.textContent = '';
+            modal.classList.add('hidden');
+        }
+
+        document.getElementById('image-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'image-modal') {
+                closeImageModal();
+            }
+        });
+
+        document.getElementById('image-modal-close').addEventListener('click', closeImageModal);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            }
+        });
 
         // Reviews
         document.getElementById('add-review-btn').addEventListener('click', () => {
