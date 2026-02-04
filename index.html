@@ -396,7 +396,7 @@
         import {
             getFirestore,
             collection,
-            getDocs,
+            onSnapshot,
             addDoc,
             updateDoc,
             deleteDoc,
@@ -426,28 +426,38 @@
         let selectedRating = 5;
         let clickCount = 0;
         let clickTimeout;
-
-        // Firestore helpers
-        async function loadCollection(name) {
-            const snapshot = await getDocs(collection(db, name));
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        }
+        let hasSeededServices = false;
 
         // Initialize
         async function init() {
-            services = await loadCollection('services');
-            reviews = await loadCollection('reviews');
-            contacts = await loadCollection('contacts');
+            onSnapshot(collection(db, 'services'), async (snapshot) => {
+                services = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                const hasBeforeAfter = services.some(s => s && s.beforeImage && s.afterImage);
+                if (!hasSeededServices && (services.length === 0 || !hasBeforeAfter)) {
+                    hasSeededServices = true;
+                    await seedServicesFromImages();
+                    return;
+                }
+                renderServices();
+                updateServiceDropdown();
+            }, (error) => {
+                console.error('Failed to load services:', error);
+            });
 
-            const hasBeforeAfter = services.some(s => s && s.beforeImage && s.afterImage);
-            if (services.length === 0 || !hasBeforeAfter) {
-                await seedServicesFromImages();
-                services = await loadCollection('services');
-            }
-            
-            renderServices();
-            renderReviews();
-            updateServiceDropdown();
+            onSnapshot(collection(db, 'reviews'), (snapshot) => {
+                reviews = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                renderReviews();
+                if (isAdmin) renderPendingReviews();
+            }, (error) => {
+                console.error('Failed to load reviews:', error);
+            });
+
+            onSnapshot(collection(db, 'contacts'), (snapshot) => {
+                contacts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (isAdmin) renderMessages();
+            }, (error) => {
+                console.error('Failed to load contacts:', error);
+            });
             
             if (isAdmin) {
                 showAdminFeatures();
