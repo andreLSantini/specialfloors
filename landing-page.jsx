@@ -191,7 +191,7 @@ export default function ServiceLandingPage() {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <img 
-                src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=50&h=50&fit=crop" 
+                src="logo.png" 
                 alt="Special Build & Renovate Logo" 
                 className="w-12 h-12 rounded-lg object-cover"
               />
