@@ -391,7 +391,31 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import {
+            getFirestore,
+            collection,
+            getDocs,
+            addDoc,
+            updateDoc,
+            deleteDoc,
+            doc
+        } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDamENPet_9ZyJMYawbmH8O6QkWb_KwH5c",
+            authDomain: "special-floors-of-ga-llc.firebaseapp.com",
+            projectId: "special-floors-of-ga-llc",
+            storageBucket: "special-floors-of-ga-llc.firebasestorage.app",
+            messagingSenderId: "145764004972",
+            appId: "1:145764004972:web:c5e8c614e82eb1d85d5449",
+            measurementId: "G-B62413Q0NZ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
         // State
         let isAdmin = false;
         let currentSlide = 0;
@@ -403,26 +427,22 @@
         let clickCount = 0;
         let clickTimeout;
 
-        // LocalStorage functions
-        function saveToStorage(key, data) {
-            localStorage.setItem(key, JSON.stringify(data));
-        }
-
-        function loadFromStorage(key) {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : null;
+        // Firestore helpers
+        async function loadCollection(name) {
+            const snapshot = await getDocs(collection(db, name));
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         }
 
         // Initialize
-        function init() {
-            services = loadFromStorage('services') || [];
-            reviews = loadFromStorage('reviews') || [];
-            contacts = loadFromStorage('contacts') || [];
+        async function init() {
+            services = await loadCollection('services');
+            reviews = await loadCollection('reviews');
+            contacts = await loadCollection('contacts');
 
             const hasBeforeAfter = services.some(s => s && s.beforeImage && s.afterImage);
             if (services.length === 0 || !hasBeforeAfter) {
-                seedServicesFromImages();
-                saveToStorage('services', services);
+                await seedServicesFromImages();
+                services = await loadCollection('services');
             }
             
             renderServices();
@@ -567,7 +587,7 @@
             clearServiceForm();
         });
 
-        document.getElementById('save-service-btn').addEventListener('click', () => {
+        document.getElementById('save-service-btn').addEventListener('click', async () => {
             const title = document.getElementById('service-title').value;
             const description = document.getElementById('service-description').value;
             const beforeImage = document.getElementById('service-image-before').value;
@@ -580,7 +600,6 @@
             }
 
             const service = {
-                id: Date.now(),
                 title,
                 description,
                 beforeImage,
@@ -589,8 +608,8 @@
                 date: new Date().toLocaleDateString('en-US')
             };
 
-            services.push(service);
-            saveToStorage('services', services);
+            const docRef = await addDoc(collection(db, 'services'), service);
+            services.push({ id: docRef.id, ...service });
             renderServices();
             updateServiceDropdown();
             document.getElementById('add-service-form').classList.add('hidden');
@@ -640,7 +659,7 @@
                         <p class="text-gray-600 mb-4">${service.description}</p>
                         <p class="text-sm text-gray-400">Posted on: ${service.date}</p>
                         ${isAdmin ? `
-                            <button onclick="deleteService(${service.id})" class="mt-4 text-red-500 hover:text-red-700 transition text-sm">
+                            <button onclick="deleteService('${service.id}')" class="mt-4 text-red-500 hover:text-red-700 transition text-sm">
                                 🗑️ Delete
                             </button>
                         ` : ''}
@@ -649,10 +668,10 @@
             `).join('');
         }
 
-        function deleteService(id) {
+        async function deleteService(id) {
             if (!confirm('Do you really want to delete this service?')) return;
+            await deleteDoc(doc(db, 'services', id));
             services = services.filter(s => s.id !== id);
-            saveToStorage('services', services);
             renderServices();
             updateServiceDropdown();
         }
@@ -670,7 +689,7 @@
             document.getElementById('review-name').focus();
         }
 
-        function seedServicesFromImages() {
+        async function seedServicesFromImages() {
             const defaultServiceImages = [
                 'image/services (1).jpeg',
                 'image/services (2).jpeg',
@@ -689,19 +708,18 @@
                 'image/services (15).jpeg'
             ];
 
-            services = [];
             for (let i = 0; i < defaultServiceImages.length; i += 2) {
                 const beforeImage = defaultServiceImages[i];
                 const afterImage = defaultServiceImages[i + 1];
-                services.push({
-                    id: Date.now() + i,
+                const seed = {
                     title: `Service ${Math.floor(i / 2) + 1}`,
                     description: 'Professional flooring and home improvement work.',
                     beforeImage,
                     afterImage: afterImage || '',
                     location: '',
                     date: new Date().toLocaleDateString('en-US')
-                });
+                };
+                await addDoc(collection(db, 'services'), seed);
             }
         }
 
@@ -769,7 +787,7 @@
             });
         }
 
-        document.getElementById('submit-review-btn').addEventListener('click', () => {
+        document.getElementById('submit-review-btn').addEventListener('click', async () => {
             const name = document.getElementById('review-name').value;
             const service = document.getElementById('review-service').value;
             const comment = document.getElementById('review-comment').value;
@@ -780,7 +798,6 @@
             }
 
             const review = {
-                id: Date.now(),
                 name,
                 service,
                 rating: selectedRating,
@@ -789,8 +806,8 @@
                 date: new Date().toLocaleDateString('en-US')
             };
 
-            reviews.push(review);
-            saveToStorage('reviews', reviews);
+            const docRef = await addDoc(collection(db, 'reviews'), review);
+            reviews.push({ id: docRef.id, ...review });
             document.getElementById('review-form').classList.add('hidden');
             clearReviewForm();
             alert('Review submitted! Waiting for approval.');
@@ -825,7 +842,7 @@
                     <p class="text-gray-600 mb-3">${review.comment}</p>
                     <p class="text-sm text-gray-400">${review.date}</p>
                     ${isAdmin ? `
-                        <button onclick="deleteReview(${review.id})" class="mt-3 text-red-500 hover:text-red-700 transition text-sm">
+                        <button onclick="deleteReview('${review.id}')" class="mt-3 text-red-500 hover:text-red-700 transition text-sm">
                             🗑️ Delete
                         </button>
                     ` : ''}
@@ -858,10 +875,10 @@
                             <p class="text-gray-700 mb-2">${review.comment}</p>
                             <p class="text-sm text-gray-400 mb-3">${review.date}</p>
                             <div class="flex space-x-2">
-                                <button onclick="approveReview(${review.id})" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition text-sm">
+                                <button onclick="approveReview('${review.id}')" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition text-sm">
                                     ✓ Approve
                                 </button>
-                                <button onclick="deleteReview(${review.id})" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition text-sm">
+                                <button onclick="deleteReview('${review.id}')" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition text-sm">
                                     ✗ Reject
                                 </button>
                             </div>
@@ -871,22 +888,22 @@
             `;
         }
 
-        function approveReview(id) {
-            reviews = reviews.map(r => r.id === id ? {...r, approved: true} : r);
-            saveToStorage('reviews', reviews);
+        async function approveReview(id) {
+            await updateDoc(doc(db, 'reviews', id), { approved: true });
+            reviews = reviews.map(r => r.id === id ? { ...r, approved: true } : r);
             renderReviews();
             renderPendingReviews();
         }
 
-        function deleteReview(id) {
+        async function deleteReview(id) {
+            await deleteDoc(doc(db, 'reviews', id));
             reviews = reviews.filter(r => r.id !== id);
-            saveToStorage('reviews', reviews);
             renderReviews();
             if (isAdmin) renderPendingReviews();
         }
 
         // Contact
-        document.getElementById('send-contact-btn').addEventListener('click', () => {
+        document.getElementById('send-contact-btn').addEventListener('click', async () => {
             const name = document.getElementById('contact-name').value;
             const email = document.getElementById('contact-email').value;
             const phone = document.getElementById('contact-phone').value;
@@ -898,7 +915,6 @@
             }
 
             const contact = {
-                id: Date.now(),
                 name,
                 email,
                 phone,
@@ -907,8 +923,8 @@
                 read: false
             };
 
-            contacts.push(contact);
-            saveToStorage('contacts', contacts);
+            const docRef = await addDoc(collection(db, 'contacts'), contact);
+            contacts.push({ id: docRef.id, ...contact });
             
             document.getElementById('contact-name').value = '';
             document.getElementById('contact-email').value = '';
@@ -947,7 +963,7 @@
                                     ${contact.phone ? `<p class="text-sm text-gray-600">${contact.phone}</p>` : ''}
                                 </div>
                                 ${!contact.read ? `
-                                    <button onclick="markAsRead(${contact.id})" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition text-sm">
+                                    <button onclick="markAsRead('${contact.id}')" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition text-sm">
                                         ✓ Mark as read
                                     </button>
                                 ` : ''}
@@ -960,16 +976,26 @@
             `;
         }
 
-        function markAsRead(id) {
-            contacts = contacts.map(c => c.id === id ? {...c, read: true} : c);
-            saveToStorage('contacts', contacts);
+        async function markAsRead(id) {
+            await updateDoc(doc(db, 'contacts', id), { read: true });
+            contacts = contacts.map(c => c.id === id ? { ...c, read: true } : c);
             renderMessages();
         }
 
+        // Expose functions used in inline handlers
+        window.deleteService = deleteService;
+        window.approveReview = approveReview;
+        window.deleteReview = deleteReview;
+        window.markAsRead = markAsRead;
+        window.openReviewForService = openReviewForService;
+        window.openImageModal = openImageModal;
+
         // Initialize on page load
-        init();
-        updateStars();
-        updateCarousel();
+        (async () => {
+            await init();
+            updateStars();
+            updateCarousel();
+        })();
     </script>
 </body>
 </html>
